@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -13,6 +12,7 @@ namespace HydronicNetworkAuditor.Reporting
         public string Folder { get; set; }
         public string SummaryTxt { get; set; }
         public string NodesCsv { get; set; }
+        public string ConnectorsCsv { get; set; }
         public string EdgesCsv { get; set; }
         public string GraphJson { get; set; }
     }
@@ -35,12 +35,14 @@ namespace HydronicNetworkAuditor.Reporting
                 Folder = folder,
                 SummaryTxt = Path.Combine(folder, "summary.txt"),
                 NodesCsv = Path.Combine(folder, "nodes.csv"),
+                ConnectorsCsv = Path.Combine(folder, "connectors.csv"),
                 EdgesCsv = Path.Combine(folder, "edges.csv"),
                 GraphJson = Path.Combine(folder, "graph.json")
             };
 
             File.WriteAllText(bundle.SummaryTxt, BuildSummary(result), Encoding.UTF8);
             File.WriteAllText(bundle.NodesCsv, BuildNodesCsv(result), Encoding.UTF8);
+            File.WriteAllText(bundle.ConnectorsCsv, BuildConnectorsCsv(result), Encoding.UTF8);
             File.WriteAllText(bundle.EdgesCsv, BuildEdgesCsv(result), Encoding.UTF8);
             File.WriteAllText(bundle.GraphJson, BuildJson(result), Encoding.UTF8);
 
@@ -61,7 +63,8 @@ namespace HydronicNetworkAuditor.Reporting
             sb.AppendLine("GRAPH SUMMARY");
             sb.AppendLine("-------------");
             sb.AppendLine("Nodes: " + result.Nodes.Count);
-            sb.AppendLine("Edges: " + result.Edges.Count);
+            sb.AppendLine("Connectors: " + result.Connectors.Count);
+            sb.AppendLine("Physical connector edges: " + result.Edges.Count);
             sb.AppendLine("Connected components: " + result.Components.Count);
             sb.AppendLine("Open end connectors: " + result.OpenEndConnectorCount);
             sb.AppendLine("Direct HT/LT boundary edges: " + result.DirectHtLtBoundaries.Count);
@@ -98,16 +101,18 @@ namespace HydronicNetworkAuditor.Reporting
             sb.AppendLine("-----------------------");
             if (result.DirectHtLtBoundaries.Count == 0)
             {
-                sb.AppendLine("No direct HT-to-LT element boundary was detected.");
-                sb.AppendLine("Note: a real transition can still pass through Unknown/Mixed fittings or accessories.");
+                sb.AppendLine("No direct HT-to-LT classified connector edge was detected.");
+                sb.AppendLine("A real transition can still pass through Unknown/Mixed fittings or accessories.");
             }
             else
             {
                 foreach (AuditEdge edge in result.DirectHtLtBoundaries)
                 {
                     sb.AppendLine(
-                        edge.A + " [" + edge.ACategory + "/" + edge.ANetwork + "] <-> " +
-                        edge.B + " [" + edge.BCategory + "/" + edge.BNetwork + "]");
+                        edge.A + ":" + edge.AConnectorId +
+                        " [" + edge.ACategory + "/" + edge.ANetwork + "] <-> " +
+                        edge.B + ":" + edge.BConnectorId +
+                        " [" + edge.BCategory + "/" + edge.BNetwork + "]");
                 }
             }
 
@@ -130,20 +135,32 @@ namespace HydronicNetworkAuditor.Reporting
                 string connected = string.Join(";", n.ConnectedElementIds);
                 sb.AppendLine(string.Join(",", new[]
                 {
-                    Csv(n.Id),
-                    Csv(n.UniqueId),
-                    Csv(n.Category),
-                    Csv(n.Name),
-                    Csv(n.Family),
-                    Csv(n.Type),
-                    Csv(n.SystemNames),
-                    Csv(n.SystemTypes),
-                    Csv(n.TemperatureNetwork.ToString()),
-                    Csv(n.FlowSide.ToString()),
-                    Csv(n.ConnectorCount),
-                    Csv(n.OpenEndConnectorCount),
-                    Csv(connected),
-                    Csv(n.EvidenceText)
+                    Csv(n.Id), Csv(n.UniqueId), Csv(n.Category), Csv(n.Name), Csv(n.Family), Csv(n.Type),
+                    Csv(n.SystemNames), Csv(n.SystemTypes), Csv(n.TemperatureNetwork.ToString()),
+                    Csv(n.FlowSide.ToString()), Csv(n.ConnectorCount), Csv(n.OpenEndConnectorCount),
+                    Csv(connected), Csv(n.EvidenceText)
+                }));
+            }
+
+            return sb.ToString();
+        }
+
+        private static string BuildConnectorsCsv(AuditResult result)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("OwnerElementId,ConnectorId,Domain,ConnectorType,PipeSystemType,MEPSystemName,Direction,IsConnected,OriginXmm,OriginYmm,OriginZmm");
+
+            foreach (AuditConnector c in result.Connectors
+                         .OrderBy(c => c.OwnerElementId)
+                         .ThenBy(c => c.ConnectorId))
+            {
+                sb.AppendLine(string.Join(",", new[]
+                {
+                    Csv(c.OwnerElementId), Csv(c.ConnectorId), Csv(c.Domain), Csv(c.ConnectorType),
+                    Csv(c.PipeSystemType), Csv(c.MEPSystemName), Csv(c.Direction), Csv(c.IsConnected),
+                    Csv(c.OriginXmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(c.OriginYmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(c.OriginZmm.ToString("0.###", CultureInfo.InvariantCulture))
                 }));
             }
 
@@ -153,21 +170,19 @@ namespace HydronicNetworkAuditor.Reporting
         private static string BuildEdgesCsv(AuditResult result)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("A,B,ACategory,BCategory,ANetwork,BNetwork,AFlowSide,BFlowSide,DirectHtLtBoundary");
+            sb.AppendLine("A,AConnectorId,B,BConnectorId,ACategory,BCategory,ANetwork,BNetwork,AFlowSide,BFlowSide,DirectHtLtBoundary");
 
-            foreach (AuditEdge e in result.Edges.OrderBy(e => e.A).ThenBy(e => e.B))
+            foreach (AuditEdge e in result.Edges
+                         .OrderBy(e => e.A)
+                         .ThenBy(e => e.AConnectorId)
+                         .ThenBy(e => e.B)
+                         .ThenBy(e => e.BConnectorId))
             {
                 sb.AppendLine(string.Join(",", new[]
                 {
-                    Csv(e.A),
-                    Csv(e.B),
-                    Csv(e.ACategory),
-                    Csv(e.BCategory),
-                    Csv(e.ANetwork.ToString()),
-                    Csv(e.BNetwork.ToString()),
-                    Csv(e.AFlowSide.ToString()),
-                    Csv(e.BFlowSide.ToString()),
-                    Csv(e.IsDirectHtLtBoundary)
+                    Csv(e.A), Csv(e.AConnectorId), Csv(e.B), Csv(e.BConnectorId),
+                    Csv(e.ACategory), Csv(e.BCategory), Csv(e.ANetwork.ToString()), Csv(e.BNetwork.ToString()),
+                    Csv(e.AFlowSide.ToString()), Csv(e.BFlowSide.ToString()), Csv(e.IsDirectHtLtBoundary)
                 }));
             }
 
@@ -197,6 +212,7 @@ namespace HydronicNetworkAuditor.Reporting
                 AppendJsonProperty(sb, "systemTypes", n.SystemTypes, true, 3);
                 AppendJsonProperty(sb, "temperatureNetwork", n.TemperatureNetwork.ToString(), true, 3);
                 AppendJsonProperty(sb, "flowSide", n.FlowSide.ToString(), true, 3);
+                AppendJsonProperty(sb, "evidence", n.EvidenceText, true, 3);
                 AppendJsonNumber(sb, "connectorCount", n.ConnectorCount, true, 3);
                 AppendJsonNumber(sb, "openEndConnectorCount", n.OpenEndConnectorCount, true, 3);
                 sb.Append("      \"connectedElementIds\": [");
@@ -207,21 +223,64 @@ namespace HydronicNetworkAuditor.Reporting
             }
             sb.AppendLine("  ],");
 
+            sb.AppendLine("  \"connectors\": [");
+            for (int i = 0; i < result.Connectors.Count; i++)
+            {
+                AuditConnector c = result.Connectors[i];
+                sb.AppendLine("    {");
+                AppendJsonNumber(sb, "ownerElementId", c.OwnerElementId, true, 3);
+                AppendJsonNumber(sb, "connectorId", c.ConnectorId, true, 3);
+                AppendJsonProperty(sb, "domain", c.Domain, true, 3);
+                AppendJsonProperty(sb, "connectorType", c.ConnectorType, true, 3);
+                AppendJsonProperty(sb, "pipeSystemType", c.PipeSystemType, true, 3);
+                AppendJsonProperty(sb, "mepSystemName", c.MEPSystemName, true, 3);
+                AppendJsonProperty(sb, "direction", c.Direction, true, 3);
+                AppendJsonBoolean(sb, "isConnected", c.IsConnected, true, 3);
+                AppendJsonDouble(sb, "originXmm", c.OriginXmm, true, 3);
+                AppendJsonDouble(sb, "originYmm", c.OriginYmm, true, 3);
+                AppendJsonDouble(sb, "originZmm", c.OriginZmm, false, 3);
+                sb.Append("    }");
+                sb.AppendLine(i < result.Connectors.Count - 1 ? "," : "");
+            }
+            sb.AppendLine("  ],");
+
             sb.AppendLine("  \"edges\": [");
             for (int i = 0; i < result.Edges.Count; i++)
             {
                 AuditEdge e = result.Edges[i];
                 sb.AppendLine("    {");
                 AppendJsonNumber(sb, "a", e.A, true, 3);
+                AppendJsonNumber(sb, "aConnectorId", e.AConnectorId, true, 3);
                 AppendJsonNumber(sb, "b", e.B, true, 3);
+                AppendJsonNumber(sb, "bConnectorId", e.BConnectorId, true, 3);
                 AppendJsonProperty(sb, "aNetwork", e.ANetwork.ToString(), true, 3);
                 AppendJsonProperty(sb, "bNetwork", e.BNetwork.ToString(), true, 3);
                 AppendJsonProperty(sb, "aFlowSide", e.AFlowSide.ToString(), true, 3);
                 AppendJsonProperty(sb, "bFlowSide", e.BFlowSide.ToString(), true, 3);
-                sb.Append("      \"directHtLtBoundary\": ");
-                sb.AppendLine(e.IsDirectHtLtBoundary ? "true" : "false");
+                AppendJsonBoolean(sb, "directHtLtBoundary", e.IsDirectHtLtBoundary, false, 3);
                 sb.Append("    }");
                 sb.AppendLine(i < result.Edges.Count - 1 ? "," : "");
+            }
+            sb.AppendLine("  ],");
+
+            sb.AppendLine("  \"components\": [");
+            for (int i = 0; i < result.Components.Count; i++)
+            {
+                ConnectedComponentSummary c = result.Components[i];
+                sb.AppendLine("    {");
+                AppendJsonNumber(sb, "index", c.Index, true, 3);
+                AppendJsonNumber(sb, "nodeCount", c.NodeCount, true, 3);
+                AppendJsonNumber(sb, "edgeCount", c.EdgeCount, true, 3);
+                AppendJsonNumber(sb, "htNodeCount", c.HtNodeCount, true, 3);
+                AppendJsonNumber(sb, "ltNodeCount", c.LtNodeCount, true, 3);
+                AppendJsonNumber(sb, "mixedNodeCount", c.MixedNodeCount, true, 3);
+                AppendJsonNumber(sb, "unknownNodeCount", c.UnknownNodeCount, true, 3);
+                AppendJsonBoolean(sb, "containsHtAndLt", c.ContainsHtAndLt, true, 3);
+                sb.Append("      \"nodeIds\": [");
+                sb.Append(string.Join(",", c.NodeIds));
+                sb.AppendLine("]");
+                sb.Append("    }");
+                sb.AppendLine(i < result.Components.Count - 1 ? "," : "");
             }
             sb.AppendLine("  ]");
             sb.AppendLine("}");
@@ -254,6 +313,28 @@ namespace HydronicNetworkAuditor.Reporting
             sb.Append(JsonEscape(name));
             sb.Append("\": ");
             sb.Append(value.ToString(CultureInfo.InvariantCulture));
+            if (comma) sb.Append(",");
+            sb.AppendLine();
+        }
+
+        private static void AppendJsonDouble(StringBuilder sb, string name, double value, bool comma, int indent)
+        {
+            sb.Append(new string(' ', indent * 2));
+            sb.Append("\"");
+            sb.Append(JsonEscape(name));
+            sb.Append("\": ");
+            sb.Append(value.ToString("0.###", CultureInfo.InvariantCulture));
+            if (comma) sb.Append(",");
+            sb.AppendLine();
+        }
+
+        private static void AppendJsonBoolean(StringBuilder sb, string name, bool value, bool comma, int indent)
+        {
+            sb.Append(new string(' ', indent * 2));
+            sb.Append("\"");
+            sb.Append(JsonEscape(name));
+            sb.Append("\": ");
+            sb.Append(value ? "true" : "false");
             if (comma) sb.Append(",");
             sb.AppendLine();
         }
