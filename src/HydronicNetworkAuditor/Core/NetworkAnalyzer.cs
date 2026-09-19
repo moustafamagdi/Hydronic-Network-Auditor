@@ -50,12 +50,15 @@ namespace HydronicNetworkAuditor.Core
                     }
                 }
 
-                int degreeSum = ids.Sum(id => adjacency[id].Count);
+                var idSet = new HashSet<long>(ids);
+                int physicalEdgeCount = result.Edges.Count(
+                    e => idSet.Contains(e.A) && idSet.Contains(e.B));
+
                 var component = new ConnectedComponentSummary
                 {
                     Index = index++,
                     NodeCount = ids.Count,
-                    EdgeCount = degreeSum / 2,
+                    EdgeCount = physicalEdgeCount,
                     HtNodeCount = ids.Count(id => nodeById[id].TemperatureNetwork == TemperatureNetwork.HT),
                     LtNodeCount = ids.Count(id => nodeById[id].TemperatureNetwork == TemperatureNetwork.LT),
                     MixedNodeCount = ids.Count(id => nodeById[id].TemperatureNetwork == TemperatureNetwork.Mixed),
