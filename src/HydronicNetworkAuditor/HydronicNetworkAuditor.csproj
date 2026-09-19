@@ -71,10 +71,20 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <PostBuildEvent>if not exist "%APPDATA%\Autodesk\Revit\Addins\2024" mkdir "%APPDATA%\Autodesk\Revit\Addins\2024"
-copy /Y "$(TargetPath)" "%APPDATA%\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.dll"
-copy /Y "$(ProjectDir)..\..\deploy\HydronicNetworkAuditor.addin" "%APPDATA%\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.addin"</PostBuildEvent>
+    <RevitAddinsDir>$(APPDATA)\Autodesk\Revit\Addins\2024</RevitAddinsDir>
+    <AddinManifestPath>$(MSBuildProjectDirectory)\..\..\deploy\HydronicNetworkAuditor.addin</AddinManifestPath>
   </PropertyGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <Target Name="DeployToRevit" AfterTargets="Build">
+    <MakeDir Directories="$(RevitAddinsDir)" />
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFiles="$(RevitAddinsDir)\HydronicNetworkAuditor.dll"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(AddinManifestPath)"
+          DestinationFiles="$(RevitAddinsDir)\HydronicNetworkAuditor.addin"
+          SkipUnchangedFiles="true" />
+    <Message Text="Hydronic Network Auditor deployed to $(RevitAddinsDir)" Importance="high" />
+  </Target>
 </Project>
