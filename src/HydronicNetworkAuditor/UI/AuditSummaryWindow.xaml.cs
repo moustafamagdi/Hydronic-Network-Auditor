@@ -21,28 +21,29 @@ namespace HydronicNetworkAuditor.UI
             FolderText.ToolTip = bundle.Folder;
 
             var sb = new StringBuilder();
-            sb.AppendLine("Nodes                    : " + result.Nodes.Count);
-            sb.AppendLine("Connectors               : " + result.Connectors.Count);
-            sb.AppendLine("Physical connector edges : " + result.Edges.Count);
-            sb.AppendLine("Connected components     : " + result.Components.Count);
-            sb.AppendLine("Open end connectors      : " + result.OpenEndConnectorCount);
-            sb.AppendLine("Direct HT/LT boundaries  : " + result.DirectHtLtBoundaries.Count);
-            sb.AppendLine("Mixed classification     : " + result.MixedClassificationNodeCount);
+            sb.AppendLine("Nodes                         : " + result.Nodes.Count);
+            sb.AppendLine("Hydronic relevant nodes       : " + result.Nodes.Count(n => n.IsHydronicRelevant));
+            sb.AppendLine("Connectors                    : " + result.Connectors.Count);
+            sb.AppendLine("Physical connector edges      : " + result.Edges.Count);
+            sb.AppendLine("Connected components          : " + result.Components.Count);
+            sb.AppendLine("Hydronic open ends            : " + result.OpenEndConnectorCount);
+            sb.AppendLine("Direct HT/LT boundaries       : " + result.DirectHtLtBoundaries.Count);
+            sb.AppendLine("HT/LT gap candidates <=250 mm : " + result.InterfaceGapCandidates.Count);
+            sb.AppendLine("Flow classification conflicts : " + result.FlowClassificationConflictCount);
             sb.AppendLine();
-            sb.AppendLine("HT nodes                 : " + result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.HT));
-            sb.AppendLine("LT nodes                 : " + result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.LT));
-            sb.AppendLine("Unknown network nodes    : " + result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.Unknown));
+            sb.AppendLine("HT nodes                      : " + result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.HT));
+            sb.AppendLine("LT nodes                      : " + result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.LT));
+            sb.AppendLine("Unknown network nodes         : " + result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.Unknown));
             sb.AppendLine();
-            sb.AppendLine("Mixed HT/LT components:");
-            foreach (var component in result.Components.Where(c => c.ContainsHtAndLt))
+
+            sb.AppendLine("Nearest separated HT/LT interfaces:");
+            foreach (var gap in result.InterfaceGapCandidates.Take(12))
             {
                 sb.AppendLine(
-                    "  Component #" + component.Index +
-                    " | Nodes=" + component.NodeCount +
-                    " | HT=" + component.HtNodeCount +
-                    " | LT=" + component.LtNodeCount +
-                    " | Mixed=" + component.MixedNodeCount +
-                    " | Unknown=" + component.UnknownNodeCount);
+                    "  " + gap.DistanceMm.ToString("0.0") + " mm | " +
+                    gap.FlowSide + " | " +
+                    gap.AElementId + " (HT Comp " + gap.AComponentIndex + ") <-> " +
+                    gap.BElementId + " (LT Comp " + gap.BComponentIndex + ")");
             }
 
             SummaryText.Text = sb.ToString();
