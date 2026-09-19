@@ -2,83 +2,57 @@
 
 Revit 2024 / .NET Framework 4.8 add-in for auditing complex hydronic networks where **physical connector continuity does not necessarily equal logical system identity**.
 
-The initial use case is the HUMAIN DC101 chilled-water model, especially the HT/LT loops and the intentional controlled interconnections between them.
+The initial use case is the HUMAIN DC101 chilled-water model, especially HT/LT loops and controlled interconnections between them.
 
-## Current MVP
+## Current behavior
 
 The add-in is read-only. It does not rename, disconnect, reconnect, or modify any Revit element.
 
-It currently:
+It:
 
-- Reads Revit MEP physical connectors from Pipes, Pipe Fittings, Pipe Accessories and Mechanical Equipment.
-- Builds a connector-level physical graph, not only an element-level adjacency list.
-- Captures each connector's ID, domain, connector type, Revit piping system type, MEP system name, flow direction, connected state and XYZ location.
-- Captures Revit system names and piping system types as evidence.
-- Infers **HT / LT / Mixed / Unknown** from names, families, types, systems and selected parameters.
-- Infers **Supply / Return / Mixed / Unknown**.
-- Finds connected components containing both HT and LT evidence.
-- Reports direct HT-to-LT classified connector boundaries when they exist.
-- Counts open end connectors.
-- Exports a machine-readable graph intended for comparison with the project design schematics.
+- reads Pipes, Pipe Fittings, Pipe Accessories and Mechanical Equipment,
+- builds a connector-level physical graph,
+- captures connector ID, system type, MEP system name, direction, connection state and XYZ,
+- classifies HT/LT primarily from the Revit **System Type** parameter,
+- classifies Supply/Return primarily from **System Classification**,
+- uses Marks/family/type text only as fallback evidence,
+- reports when connector flow classification conflicts with the declared Revit classification,
+- counts hydronic open ends only (not electrical/HVAC/refrigerant open connectors),
+- detects physically separated HT/LT open-connector pairs within 250 mm as **interface gap candidates**,
+- exports the full graph for engineering review.
+
+## Why classification priority matters
+
+Project schematics intentionally use some tags such as `BFV-CH-HT-...` on the LT side of an HT/LT interface. Therefore a Mark must not override an element whose Revit System Type is explicitly `LT CHWS` or `LT CHWR`.
 
 ## Output
 
-Every run creates a timestamped folder on the Desktop:
+Each run creates:
 
 `Desktop\HydronicNetworkAuditor\yyyyMMdd_HHmmss_fff\`
 
-with:
+Files:
 
-- `summary.txt` — quick engineering summary.
-- `nodes.csv` — one row per audited Revit element.
-- `connectors.csv` — connector-level system/direction/location data.
-- `edges.csv` — actual connector-to-connector physical connections.
-- `graph.json` — combined graph payload including nodes, connectors, edges and connected components.
+- `summary.txt`
+- `nodes.csv`
+- `connectors.csv`
+- `edges.csv`
+- `interface_gaps.csv`
+- `graph.json`
 
-The Revit command also opens a resizable modeless WPF summary window. The window only displays the already-captured audit snapshot, so it does not access the Revit API outside the valid command context.
+The modeless WPF window shows the main audit metrics and the nearest HT/LT interface candidates.
 
 ## Build / install
 
 1. Open `HydronicNetworkAuditor.sln` in Visual Studio 2022.
-2. Confirm Revit 2024 is installed at:
-   `C:\Program Files\Autodesk\Revit 2024\`
-3. Build Debug or Release.
-4. The post-build event copies both the DLL and manifest to:
+2. Build Debug or Release.
+3. MSBuild deploys the DLL and manifest to:
    `%APPDATA%\Autodesk\Revit\Addins\2024\`
-5. Start/restart Revit 2024.
-6. Run **MM Tools > Hydronic Audit > Audit Hydronic Network**.
+4. Restart Revit 2024.
+5. Run **MM Tools > Hydronic Audit > Audit Hydronic Network**.
 
-The manifest uses `.\HydronicNetworkAuditor.dll`, so the DLL and `.addin` file remain portable as long as they are deployed in the same Revit Addins folder.
+## Findings that drove v0.2
 
-## Classification evidence
+The first HUMAIN model export showed that many apparent HT/LT boundaries were classifier false positives caused by Marks. It also showed separated HT/LT interface geometry in DH2/DH3/DH4 at roughly 90-180 mm, while the DH1 pattern was materially farther apart. v0.2 therefore treats these as separated interface candidates rather than automatically calling them connected HT/LT boundaries.
 
-The MVP looks at element/family/type names, connector MEP system names, connector pipe system types, and these parameters when present:
-
-- System Name
-- System Type
-- System Classification
-- System Abbreviation
-- Service / Service Name
-- Mark
-- Comments
-- Type Comments
-- Description
-- HNA_Network
-- HNA_Flow_Side
-- HNA_Connection_Type
-
-The optional `HNA_*` parameters are reserved for a later project-specific rule layer. No parameters are created or written by the MVP.
-
-## Why connector-level export matters
-
-A designed HT/LT interconnection can pass through a valve or fitting whose own family/type/system metadata does not say HT or LT. An element-only graph can therefore miss the actual logical transition. The connector export preserves enough evidence to trace the physical path through those intermediate objects.
-
-## Next development step
-
-Run the MVP on the actual HUMAIN chilled-water model and provide the generated report folder (preferably all five files). The next rule layer will use the real model data to:
-
-- distinguish intended DH1-DH4 HT/LT cross-connections from accidental contamination,
-- trace Supply and Return separately,
-- identify the exact boundary valve/fitting chain,
-- compare the as-modelled topology against MC601-MC608,
-- flag missing/extra connections and reversed or inconsistent system classification.
+The next project-specific layer can validate the expected DH1-DH4 interface tags against MC601-MC608 and classify each interface as expected, missing, mislabeled or unexpected.
