@@ -128,7 +128,7 @@ namespace HydronicNetworkAuditor.Core
             IDictionary<long, HashSet<long>> adjacency)
         {
             var familyNodes = result.Nodes
-                .Where(n => !IsPipe(n))
+                .Where(IsRootCauseCandidateCategory)
                 .Where(n => !string.IsNullOrWhiteSpace(n.Family))
                 .Where(IsChwr)
                 .GroupBy(n => n.Family, StringComparer.OrdinalIgnoreCase)
@@ -379,7 +379,9 @@ namespace HydronicNetworkAuditor.Core
 
         private static bool IsProbableFamilyConnectorProblem(AuditNode node)
         {
-            if (node == null || IsPipe(node) || string.IsNullOrWhiteSpace(node.Family))
+            if (node == null ||
+                !IsRootCauseCandidateCategory(node) ||
+                string.IsNullOrWhiteSpace(node.Family))
                 return false;
 
             return IsChwr(node) && (IsWrongSupplyOnChwr(node) || IsMixedFlow(node));
@@ -419,6 +421,15 @@ namespace HydronicNetworkAuditor.Core
         {
             return node != null &&
                    string.Equals(node.Category, "Pipes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsRootCauseCandidateCategory(AuditNode node)
+        {
+            if (node == null || string.IsNullOrWhiteSpace(node.Category))
+                return false;
+
+            return string.Equals(node.Category, "Pipe Accessories", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(node.Category, "Mechanical Equipment", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool Contains(string value, string token)
