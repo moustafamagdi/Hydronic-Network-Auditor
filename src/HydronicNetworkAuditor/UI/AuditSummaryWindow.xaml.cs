@@ -46,6 +46,62 @@ namespace HydronicNetworkAuditor.UI
                     gap.BElementId + " (LT Comp " + gap.BComponentIndex + ")");
             }
 
+            sb.AppendLine();
+            sb.AppendLine("Top probable root-cause families:");
+            foreach (var family in result.Diagnostics.FamilyRankings
+                .Where(f => f.IsProbableRootCause)
+                .Take(10))
+            {
+                sb.AppendLine(
+                    "  " + family.Family +
+                    " | CHWR " + family.ChwrInstanceCount +
+                    " | Wrong " + family.WrongSupplyCount +
+                    " | Mixed " + family.MixedCount +
+                    " | Affected pipes " + family.AffectedConflictPipeCount +
+                    " | Score " + family.RootCauseScore.ToString("0.0"));
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Top propagation clusters:");
+            foreach (var cluster in result.Diagnostics.PropagationClusters.Take(10))
+            {
+                sb.AppendLine(
+                    "  " + cluster.Scope +
+                    " | " + cluster.Network +
+                    " | Comp " + cluster.ComponentIndex +
+                    " | Pipes " + cluster.ConflictPipeCount +
+                    " | Suspects: " +
+                    (cluster.SuspectFamilies.Count == 0
+                        ? "(none)"
+                        : string.Join("; ", cluster.SuspectFamilies)));
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Run-to-run delta:");
+            if (result.Diagnostics.Delta.HasPreviousRun)
+            {
+                sb.AppendLine(
+                    "  Previous " + result.Diagnostics.Delta.PreviousIssueCount +
+                    " -> Current " + result.Diagnostics.Delta.CurrentIssueCount +
+                    " | Resolved " + result.Diagnostics.Delta.ResolvedIssueCount +
+                    " | New " + result.Diagnostics.Delta.NewIssueCount +
+                    " | Persisting " + result.Diagnostics.Delta.PersistingIssueCount);
+            }
+            else
+            {
+                sb.AppendLine(
+                    "  First diagnostic snapshot for this model. Current tracked issues: " +
+                    result.Diagnostics.Delta.CurrentIssueCount);
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Additional files:");
+            sb.AppendLine("  diagnostics_summary.txt");
+            sb.AppendLine("  root_causes.csv");
+            sb.AppendLine("  propagation_clusters.csv");
+            sb.AppendLine("  diagnostic_issues.csv");
+            sb.AppendLine("  delta.txt");
+
             SummaryText.Text = sb.ToString();
         }
 
