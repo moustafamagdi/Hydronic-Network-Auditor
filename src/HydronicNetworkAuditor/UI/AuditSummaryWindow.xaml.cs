@@ -47,18 +47,30 @@ namespace HydronicNetworkAuditor.UI
             }
 
             sb.AppendLine();
-            sb.AppendLine("Top probable root-cause families:");
+            int openEndIssueNodes = result.Diagnostics.Issues.Count(i =>
+                string.Equals(i.IssueType, "Hydronic Open End", System.StringComparison.OrdinalIgnoreCase));
+            int coreIssueCount = result.Diagnostics.Issues.Count - openEndIssueNodes;
+
+            sb.AppendLine("Core diagnostic issues          : " + coreIssueCount);
+            sb.AppendLine("Open-end QA nodes (separate)    : " + openEndIssueNodes);
+            sb.AppendLine();
+
+            sb.AppendLine("Family diagnostic confidence:");
             foreach (var family in result.Diagnostics.FamilyRankings
-                .Where(f => f.IsProbableRootCause)
+                .Where(f => !string.Equals(
+                    f.ConfidenceClassification,
+                    "Healthy",
+                    System.StringComparison.OrdinalIgnoreCase))
                 .Take(10))
             {
                 sb.AppendLine(
-                    "  " + family.Family +
+                    "  " + family.ConfidenceClassification +
+                    " | " + family.Family +
                     " | CHWR " + family.ChwrInstanceCount +
                     " | Wrong " + family.WrongSupplyCount +
                     " | Mixed " + family.MixedCount +
                     " | Affected pipes " + family.AffectedConflictPipeCount +
-                    " | Score " + family.RootCauseScore.ToString("0.0"));
+                    " | IDs " + string.Join(";", family.ProblemInstanceIds));
             }
 
             sb.AppendLine();
@@ -73,7 +85,11 @@ namespace HydronicNetworkAuditor.UI
                     " | Suspects: " +
                     (cluster.SuspectFamilies.Count == 0
                         ? "(none)"
-                        : string.Join("; ", cluster.SuspectFamilies)));
+                        : string.Join("; ", cluster.SuspectFamilies)) +
+                    " | IDs: " +
+                    (cluster.SuspectInstanceIds.Count == 0
+                        ? "(none)"
+                        : string.Join(";", cluster.SuspectInstanceIds)));
             }
 
             sb.AppendLine();
