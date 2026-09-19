@@ -32,6 +32,7 @@ namespace HydronicNetworkAuditor.Core
         public int AffectedConflictPipeCount { get; set; }
         public double ErrorRatePercent { get; set; }
         public double RootCauseScore { get; set; }
+        public string ConfidenceClassification { get; set; }
         public bool IsProbableRootCause { get; set; }
         public List<long> ProblemInstanceIds { get; } = new List<long>();
     }
@@ -45,6 +46,7 @@ namespace HydronicNetworkAuditor.Core
         public int ConflictPipeCount { get; set; }
         public List<long> ConflictPipeIds { get; } = new List<long>();
         public List<string> SuspectFamilies { get; } = new List<string>();
+        public List<long> SuspectInstanceIds { get; } = new List<long>();
     }
 
     public sealed class AuditDelta
