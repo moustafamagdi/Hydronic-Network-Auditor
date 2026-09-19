@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="App.cs" />
     <Compile Include="Commands\AuditNetworkCommand.cs" />
+    <Compile Include="Commands\RepairSelectedConnectionsCommand.cs" />
     <Compile Include="Core\AuditModels.cs" />
     <Compile Include="Core\ConnectorGraphBuilder.cs" />
     <Compile Include="Core\DiagnosticModels.cs" />
