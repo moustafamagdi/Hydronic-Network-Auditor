@@ -229,7 +229,7 @@ namespace HydronicNetworkAuditor.Reporting
         private static string Csv(object value)
         {
             string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-            return """ + text.Replace(""", """") + """;
+            return "\"" + text.Replace("\"", "\"\"") + "\"";
         }
     }
 }
