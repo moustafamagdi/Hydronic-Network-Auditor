@@ -14,6 +14,7 @@ namespace HydronicNetworkAuditor.Reporting
         public string NodesCsv { get; set; }
         public string ConnectorsCsv { get; set; }
         public string EdgesCsv { get; set; }
+        public string InterfaceGapsCsv { get; set; }
         public string GraphJson { get; set; }
     }
 
@@ -37,6 +38,7 @@ namespace HydronicNetworkAuditor.Reporting
                 NodesCsv = Path.Combine(folder, "nodes.csv"),
                 ConnectorsCsv = Path.Combine(folder, "connectors.csv"),
                 EdgesCsv = Path.Combine(folder, "edges.csv"),
+                InterfaceGapsCsv = Path.Combine(folder, "interface_gaps.csv"),
                 GraphJson = Path.Combine(folder, "graph.json")
             };
 
@@ -44,6 +46,7 @@ namespace HydronicNetworkAuditor.Reporting
             File.WriteAllText(bundle.NodesCsv, BuildNodesCsv(result), Encoding.UTF8);
             File.WriteAllText(bundle.ConnectorsCsv, BuildConnectorsCsv(result), Encoding.UTF8);
             File.WriteAllText(bundle.EdgesCsv, BuildEdgesCsv(result), Encoding.UTF8);
+            File.WriteAllText(bundle.InterfaceGapsCsv, BuildInterfaceGapsCsv(result), Encoding.UTF8);
             File.WriteAllText(bundle.GraphJson, BuildJson(result), Encoding.UTF8);
 
             return bundle;
@@ -63,12 +66,15 @@ namespace HydronicNetworkAuditor.Reporting
             sb.AppendLine("GRAPH SUMMARY");
             sb.AppendLine("-------------");
             sb.AppendLine("Nodes: " + result.Nodes.Count);
+            sb.AppendLine("Hydronic-relevant nodes: " + result.Nodes.Count(n => n.IsHydronicRelevant));
             sb.AppendLine("Connectors: " + result.Connectors.Count);
             sb.AppendLine("Physical connector edges: " + result.Edges.Count);
             sb.AppendLine("Connected components: " + result.Components.Count);
-            sb.AppendLine("Open end connectors: " + result.OpenEndConnectorCount);
+            sb.AppendLine("Hydronic open end connectors: " + result.OpenEndConnectorCount);
             sb.AppendLine("Direct HT/LT boundary edges: " + result.DirectHtLtBoundaries.Count);
-            sb.AppendLine("Mixed-classification nodes: " + result.MixedClassificationNodeCount);
+            sb.AppendLine("HT/LT interface gap candidates <=250 mm: " + result.InterfaceGapCandidates.Count);
+            sb.AppendLine("Flow classification conflicts: " + result.FlowClassificationConflictCount);
+            sb.AppendLine("Mixed temperature-classification nodes: " + result.MixedClassificationNodeCount);
             sb.AppendLine();
 
             sb.AppendLine("CLASSIFICATION");
@@ -81,19 +87,36 @@ namespace HydronicNetworkAuditor.Reporting
                 sb.AppendLine(side + ": " + result.Nodes.Count(n => n.FlowSide == side));
 
             sb.AppendLine();
-            sb.AppendLine("CONNECTED COMPONENTS");
-            sb.AppendLine("--------------------");
-            foreach (ConnectedComponentSummary component in result.Components)
+            sb.AppendLine("INTERFACE GAP CANDIDATES");
+            sb.AppendLine("------------------------");
+            if (result.InterfaceGapCandidates.Count == 0)
+            {
+                sb.AppendLine("No separated HT/LT hydronic connector pairs were found within 250 mm.");
+            }
+            else
+            {
+                foreach (InterfaceGapCandidate gap in result.InterfaceGapCandidates)
+                {
+                    sb.AppendLine(
+                        gap.DistanceMm.ToString("0.###", CultureInfo.InvariantCulture) + " mm | " +
+                        gap.FlowSide + " | " +
+                        "HT " + gap.AElementId + ":" + gap.AConnectorId +
+                        " [Comp " + gap.AComponentIndex + ", " + gap.ASystemNames + "] <-> " +
+                        "LT " + gap.BElementId + ":" + gap.BConnectorId +
+                        " [Comp " + gap.BComponentIndex + ", " + gap.BSystemNames + "]");
+                }
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("FLOW CLASSIFICATION CONFLICTS");
+            sb.AppendLine("-----------------------------");
+            foreach (AuditNode node in result.Nodes.Where(n => n.FlowClassificationConflict))
             {
                 sb.AppendLine(
-                    "#" + component.Index +
-                    " Nodes=" + component.NodeCount +
-                    " Edges=" + component.EdgeCount +
-                    " HT=" + component.HtNodeCount +
-                    " LT=" + component.LtNodeCount +
-                    " Mixed=" + component.MixedNodeCount +
-                    " Unknown=" + component.UnknownNodeCount +
-                    " ContainsHT+LT=" + component.ContainsHtAndLt);
+                    node.Id + " | " +
+                    (node.Mark ?? string.Empty) + " | Declared=" +
+                    node.DeclaredSystemClassification + " | Connector=" +
+                    node.ConnectorFlowSide + " | Systems=" + node.SystemNames);
             }
 
             sb.AppendLine();
@@ -101,8 +124,7 @@ namespace HydronicNetworkAuditor.Reporting
             sb.AppendLine("-----------------------");
             if (result.DirectHtLtBoundaries.Count == 0)
             {
-                sb.AppendLine("No direct HT-to-LT classified connector edge was detected.");
-                sb.AppendLine("A real transition can still pass through Unknown/Mixed fittings or accessories.");
+                sb.AppendLine("No physically connected HT-to-LT boundary was detected.");
             }
             else
             {
@@ -116,19 +138,13 @@ namespace HydronicNetworkAuditor.Reporting
                 }
             }
 
-            sb.AppendLine();
-            sb.AppendLine("MIXED CLASSIFICATION NODES");
-            sb.AppendLine("--------------------------");
-            foreach (AuditNode node in result.Nodes.Where(n => n.TemperatureNetwork == TemperatureNetwork.Mixed))
-                sb.AppendLine(node.Id + " | " + node.Category + " | " + node.Name + " | " + node.EvidenceText);
-
             return sb.ToString();
         }
 
         private static string BuildNodesCsv(AuditResult result)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("ElementId,UniqueId,Category,Name,Family,Type,SystemNames,SystemTypes,TemperatureNetwork,FlowSide,ConnectorCount,OpenEndConnectorCount,ConnectedElementIds,Evidence");
+            sb.AppendLine("ElementId,UniqueId,Category,Name,Family,Type,Mark,SystemNames,ConnectorSystemTypes,DeclaredSystemType,DeclaredSystemClassification,TemperatureNetwork,FlowSide,ConnectorFlowSide,FlowClassificationConflict,IsHydronicRelevant,ComponentIndex,ConnectorCount,HydronicOpenEndConnectorCount,ConnectedElementIds,Evidence");
 
             foreach (AuditNode n in result.Nodes.OrderBy(n => n.Id))
             {
@@ -136,9 +152,11 @@ namespace HydronicNetworkAuditor.Reporting
                 sb.AppendLine(string.Join(",", new[]
                 {
                     Csv(n.Id), Csv(n.UniqueId), Csv(n.Category), Csv(n.Name), Csv(n.Family), Csv(n.Type),
-                    Csv(n.SystemNames), Csv(n.SystemTypes), Csv(n.TemperatureNetwork.ToString()),
-                    Csv(n.FlowSide.ToString()), Csv(n.ConnectorCount), Csv(n.OpenEndConnectorCount),
-                    Csv(connected), Csv(n.EvidenceText)
+                    Csv(n.Mark), Csv(n.SystemNames), Csv(n.SystemTypes), Csv(n.DeclaredSystemType),
+                    Csv(n.DeclaredSystemClassification), Csv(n.TemperatureNetwork.ToString()),
+                    Csv(n.FlowSide.ToString()), Csv(n.ConnectorFlowSide.ToString()),
+                    Csv(n.FlowClassificationConflict), Csv(n.IsHydronicRelevant), Csv(n.ComponentIndex),
+                    Csv(n.ConnectorCount), Csv(n.OpenEndConnectorCount), Csv(connected), Csv(n.EvidenceText)
                 }));
             }
 
@@ -189,6 +207,31 @@ namespace HydronicNetworkAuditor.Reporting
             return sb.ToString();
         }
 
+        private static string BuildInterfaceGapsCsv(AuditResult result)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("DistanceMm,FlowSide,AElementId,AConnectorId,AComponentIndex,ANetwork,AMark,ASystemNames,BElementId,BConnectorId,BComponentIndex,BNetwork,BMark,BSystemNames,AXmm,AYmm,AZmm,BXmm,BYmm,BZmm");
+
+            foreach (InterfaceGapCandidate g in result.InterfaceGapCandidates)
+            {
+                sb.AppendLine(string.Join(",", new[]
+                {
+                    Csv(g.DistanceMm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(g.FlowSide), Csv(g.AElementId), Csv(g.AConnectorId), Csv(g.AComponentIndex),
+                    Csv(g.ANetwork), Csv(g.AMark), Csv(g.ASystemNames), Csv(g.BElementId), Csv(g.BConnectorId),
+                    Csv(g.BComponentIndex), Csv(g.BNetwork), Csv(g.BMark), Csv(g.BSystemNames),
+                    Csv(g.AXmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(g.AYmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(g.AZmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(g.BXmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(g.BYmm.ToString("0.###", CultureInfo.InvariantCulture)),
+                    Csv(g.BZmm.ToString("0.###", CultureInfo.InvariantCulture))
+                }));
+            }
+
+            return sb.ToString();
+        }
+
         private static string BuildJson(AuditResult result)
         {
             var sb = new StringBuilder();
@@ -208,13 +251,20 @@ namespace HydronicNetworkAuditor.Reporting
                 AppendJsonProperty(sb, "name", n.Name, true, 3);
                 AppendJsonProperty(sb, "family", n.Family, true, 3);
                 AppendJsonProperty(sb, "type", n.Type, true, 3);
+                AppendJsonProperty(sb, "mark", n.Mark, true, 3);
                 AppendJsonProperty(sb, "systemNames", n.SystemNames, true, 3);
-                AppendJsonProperty(sb, "systemTypes", n.SystemTypes, true, 3);
+                AppendJsonProperty(sb, "connectorSystemTypes", n.SystemTypes, true, 3);
+                AppendJsonProperty(sb, "declaredSystemType", n.DeclaredSystemType, true, 3);
+                AppendJsonProperty(sb, "declaredSystemClassification", n.DeclaredSystemClassification, true, 3);
                 AppendJsonProperty(sb, "temperatureNetwork", n.TemperatureNetwork.ToString(), true, 3);
                 AppendJsonProperty(sb, "flowSide", n.FlowSide.ToString(), true, 3);
+                AppendJsonProperty(sb, "connectorFlowSide", n.ConnectorFlowSide.ToString(), true, 3);
+                AppendJsonBoolean(sb, "flowClassificationConflict", n.FlowClassificationConflict, true, 3);
+                AppendJsonBoolean(sb, "isHydronicRelevant", n.IsHydronicRelevant, true, 3);
+                AppendJsonNumber(sb, "componentIndex", n.ComponentIndex, true, 3);
                 AppendJsonProperty(sb, "evidence", n.EvidenceText, true, 3);
                 AppendJsonNumber(sb, "connectorCount", n.ConnectorCount, true, 3);
-                AppendJsonNumber(sb, "openEndConnectorCount", n.OpenEndConnectorCount, true, 3);
+                AppendJsonNumber(sb, "hydronicOpenEndConnectorCount", n.OpenEndConnectorCount, true, 3);
                 sb.Append("      \"connectedElementIds\": [");
                 sb.Append(string.Join(",", n.ConnectedElementIds));
                 sb.AppendLine("]");
@@ -260,6 +310,30 @@ namespace HydronicNetworkAuditor.Reporting
                 AppendJsonBoolean(sb, "directHtLtBoundary", e.IsDirectHtLtBoundary, false, 3);
                 sb.Append("    }");
                 sb.AppendLine(i < result.Edges.Count - 1 ? "," : "");
+            }
+            sb.AppendLine("  ],");
+
+            sb.AppendLine("  \"interfaceGapCandidates\": [");
+            for (int i = 0; i < result.InterfaceGapCandidates.Count; i++)
+            {
+                InterfaceGapCandidate g = result.InterfaceGapCandidates[i];
+                sb.AppendLine("    {");
+                AppendJsonDouble(sb, "distanceMm", g.DistanceMm, true, 3);
+                AppendJsonProperty(sb, "flowSide", g.FlowSide.ToString(), true, 3);
+                AppendJsonNumber(sb, "aElementId", g.AElementId, true, 3);
+                AppendJsonNumber(sb, "aConnectorId", g.AConnectorId, true, 3);
+                AppendJsonNumber(sb, "aComponentIndex", g.AComponentIndex, true, 3);
+                AppendJsonProperty(sb, "aNetwork", g.ANetwork.ToString(), true, 3);
+                AppendJsonProperty(sb, "aMark", g.AMark, true, 3);
+                AppendJsonProperty(sb, "aSystemNames", g.ASystemNames, true, 3);
+                AppendJsonNumber(sb, "bElementId", g.BElementId, true, 3);
+                AppendJsonNumber(sb, "bConnectorId", g.BConnectorId, true, 3);
+                AppendJsonNumber(sb, "bComponentIndex", g.BComponentIndex, true, 3);
+                AppendJsonProperty(sb, "bNetwork", g.BNetwork.ToString(), true, 3);
+                AppendJsonProperty(sb, "bMark", g.BMark, true, 3);
+                AppendJsonProperty(sb, "bSystemNames", g.BSystemNames, false, 3);
+                sb.Append("    }");
+                sb.AppendLine(i < result.InterfaceGapCandidates.Count - 1 ? "," : "");
             }
             sb.AppendLine("  ],");
 
