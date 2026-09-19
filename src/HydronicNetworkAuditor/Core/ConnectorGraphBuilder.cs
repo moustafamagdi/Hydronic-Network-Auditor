@@ -134,6 +134,8 @@ namespace HydronicNetworkAuditor.Core
             result.OpenEndConnectorCount = result.Nodes.Sum(n => n.OpenEndConnectorCount);
             result.MixedClassificationNodeCount =
                 result.Nodes.Count(n => n.TemperatureNetwork == TemperatureNetwork.Mixed);
+            result.FlowClassificationConflictCount =
+                result.Nodes.Count(n => n.FlowClassificationConflict);
 
             return result;
         }
@@ -145,9 +147,9 @@ namespace HydronicNetworkAuditor.Core
             IList<AuditConnector> connectorRecords)
         {
             var systemNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var systemTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var connectorSystemTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int connectorCount = 0;
-            int openEnds = 0;
+            int hydronicOpenEnds = 0;
 
             foreach (Connector connector in connectorManager.Connectors)
             {
@@ -169,18 +171,14 @@ namespace HydronicNetworkAuditor.Core
 
                 try
                 {
-                    if (connector.ConnectorType == ConnectorType.End && !isConnected)
-                        openEnds++;
+                    pipeSystemType = connector.PipeSystemType.ToString();
+                    if (!string.IsNullOrWhiteSpace(pipeSystemType))
+                        connectorSystemTypes.Add(pipeSystemType);
                 }
                 catch { }
 
-                try
-                {
-                    pipeSystemType = connector.PipeSystemType.ToString();
-                    if (!string.IsNullOrWhiteSpace(pipeSystemType))
-                        systemTypes.Add(pipeSystemType);
-                }
-                catch { }
+                if (IsHydronicOpenEnd(connector, domain, connectorType, pipeSystemType, isConnected))
+                    hydronicOpenEnds++;
 
                 try
                 {
@@ -235,6 +233,20 @@ namespace HydronicNetworkAuditor.Core
                 typeName = type?.Name ?? string.Empty;
             }
 
+            var parameterValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string parameterName in EvidenceParameters)
+            {
+                string value = TryReadParameter(element, parameterName);
+                if (!string.IsNullOrWhiteSpace(value))
+                    parameterValues[parameterName] = value;
+            }
+
+            string declaredSystemType = GetValue(parameterValues, "System Type");
+            string declaredSystemClassification = GetValue(parameterValues, "System Classification");
+            string mark = GetValue(parameterValues, "Mark");
+            string explicitNetwork = GetValue(parameterValues, "HNA_Network");
+            string explicitFlowSide = GetValue(parameterValues, "HNA_Flow_Side");
+
             var evidence = new List<string>
             {
                 element.Name ?? string.Empty,
@@ -244,16 +256,38 @@ namespace HydronicNetworkAuditor.Core
             };
 
             evidence.AddRange(systemNames);
-            evidence.AddRange(systemTypes);
+            evidence.AddRange(connectorSystemTypes);
 
-            foreach (string parameterName in EvidenceParameters)
-            {
-                string value = TryReadParameter(element, parameterName);
-                if (!string.IsNullOrWhiteSpace(value))
-                    evidence.Add(parameterName + "=" + value);
-            }
+            foreach (KeyValuePair<string, string> pair in parameterValues)
+                evidence.Add(pair.Key + "=" + pair.Value);
 
             string evidenceText = string.Join(" | ", evidence.Where(s => !string.IsNullOrWhiteSpace(s)));
+            string connectorSystemTypesText = string.Join("; ", connectorSystemTypes.OrderBy(s => s));
+
+            TemperatureNetwork network = NetworkClassifier.InferTemperatureNetwork(
+                declaredSystemType,
+                explicitNetwork,
+                evidenceText);
+
+            FlowSide flowSide = NetworkClassifier.InferFlowSide(
+                declaredSystemClassification,
+                explicitFlowSide,
+                connectorSystemTypesText,
+                evidenceText);
+
+            FlowSide connectorFlowSide = NetworkClassifier.InferConnectorFlowSide(connectorSystemTypesText);
+
+            bool flowConflict =
+                (flowSide == FlowSide.Supply || flowSide == FlowSide.Return) &&
+                (connectorFlowSide == FlowSide.Supply || connectorFlowSide == FlowSide.Return) &&
+                flowSide != connectorFlowSide;
+
+            bool hydronicRelevant =
+                network == TemperatureNetwork.HT ||
+                network == TemperatureNetwork.LT ||
+                connectorFlowSide == FlowSide.Supply ||
+                connectorFlowSide == FlowSide.Return ||
+                ContainsHydronicClassification(declaredSystemClassification);
 
             return new AuditNode
             {
@@ -263,14 +297,49 @@ namespace HydronicNetworkAuditor.Core
                 Name = element.Name ?? string.Empty,
                 Family = family,
                 Type = typeName,
+                Mark = mark,
                 SystemNames = string.Join("; ", systemNames.OrderBy(s => s)),
-                SystemTypes = string.Join("; ", systemTypes.OrderBy(s => s)),
+                SystemTypes = connectorSystemTypesText,
+                DeclaredSystemType = declaredSystemType,
+                DeclaredSystemClassification = declaredSystemClassification,
                 EvidenceText = evidenceText,
-                TemperatureNetwork = NetworkClassifier.InferTemperatureNetwork(evidenceText),
-                FlowSide = NetworkClassifier.InferFlowSide(evidenceText),
+                TemperatureNetwork = network,
+                FlowSide = flowSide,
+                ConnectorFlowSide = connectorFlowSide,
+                FlowClassificationConflict = flowConflict,
+                IsHydronicRelevant = hydronicRelevant,
                 ConnectorCount = connectorCount,
-                OpenEndConnectorCount = openEnds
+                OpenEndConnectorCount = hydronicOpenEnds
             };
+        }
+
+        private static bool IsHydronicOpenEnd(
+            Connector connector,
+            string domain,
+            string connectorType,
+            string pipeSystemType,
+            bool isConnected)
+        {
+            if (isConnected) return false;
+            if (!string.Equals(domain, "DomainPiping", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(connectorType, ConnectorType.End.ToString(), StringComparison.OrdinalIgnoreCase)) return false;
+
+            return string.Equals(pipeSystemType, "SupplyHydronic", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(pipeSystemType, "ReturnHydronic", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ContainsHydronicClassification(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            return value.IndexOf("Hydronic Supply", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   value.IndexOf("Hydronic Return", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string GetValue(IDictionary<string, string> values, string key)
+        {
+            string value;
+            return values.TryGetValue(key, out value) ? value : string.Empty;
         }
 
         private static int SafeConnectorId(Connector connector)
