@@ -22,7 +22,8 @@ namespace HydronicNetworkAuditor.UI
 
             var sb = new StringBuilder();
             sb.AppendLine("Nodes                    : " + result.Nodes.Count);
-            sb.AppendLine("Edges                    : " + result.Edges.Count);
+            sb.AppendLine("Connectors               : " + result.Connectors.Count);
+            sb.AppendLine("Physical connector edges : " + result.Edges.Count);
             sb.AppendLine("Connected components     : " + result.Components.Count);
             sb.AppendLine("Open end connectors      : " + result.OpenEndConnectorCount);
             sb.AppendLine("Direct HT/LT boundaries  : " + result.DirectHtLtBoundaries.Count);
