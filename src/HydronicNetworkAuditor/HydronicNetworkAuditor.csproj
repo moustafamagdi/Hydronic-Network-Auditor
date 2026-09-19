@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{A2AB9F4A-22D3-42E6-9A55-6D00F36F701A}</ProjectGuid>
+    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <OutputType>Library</OutputType>
     <RootNamespace>HydronicNetworkAuditor</RootNamespace>
     <AssemblyName>HydronicNetworkAuditor</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <TargetFrameworkProfile />
     <LangVersion>latest</LangVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -70,8 +71,10 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <PostBuildEvent>if not exist "%25APPDATA%25\Autodesk\Revit\Addins\2024" mkdir "%25APPDATA%25\Autodesk\Revit\Addins\2024"
-copy /Y "$(TargetPath)" "%25APPDATA%25\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.dll"
-copy /Y "$(ProjectDir)..\..\deploy\HydronicNetworkAuditor.addin" "%25APPDATA%25\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.addin"</PostBuildEvent>
+    <PostBuildEvent>if not exist "%APPDATA%\Autodesk\Revit\Addins\2024" mkdir "%APPDATA%\Autodesk\Revit\Addins\2024"
+copy /Y "$(TargetPath)" "%APPDATA%\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.dll"
+copy /Y "$(ProjectDir)..\..\deploy\HydronicNetworkAuditor.addin" "%APPDATA%\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.addin"</PostBuildEvent>
   </PropertyGroup>
+
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
