@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A2AB9F4A-22D3-42E6-9A55-6D00F36F701A}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>HydronicNetworkAuditor</RootNamespace>
+    <AssemblyName>HydronicNetworkAuditor</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <LangVersion>latest</LangVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="RevitAPI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPIUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="App.cs" />
+    <Compile Include="Commands\AuditNetworkCommand.cs" />
+    <Compile Include="Core\AuditModels.cs" />
+    <Compile Include="Core\ConnectorGraphBuilder.cs" />
+    <Compile Include="Core\NetworkClassifier.cs" />
+    <Compile Include="Core\NetworkAnalyzer.cs" />
+    <Compile Include="Reporting\ReportExporter.cs" />
+    <Compile Include="UI\AuditSummaryWindow.xaml.cs">
+      <DependentUpon>AuditSummaryWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Include="UI\AuditSummaryWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <PostBuildEvent>if not exist "%25APPDATA%25\Autodesk\Revit\Addins\2024" mkdir "%25APPDATA%25\Autodesk\Revit\Addins\2024"
+copy /Y "$(TargetPath)" "%25APPDATA%25\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.dll"
+copy /Y "$(ProjectDir)..\..\deploy\HydronicNetworkAuditor.addin" "%25APPDATA%25\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.addin"</PostBuildEvent>
+  </PropertyGroup>
+</Project>
