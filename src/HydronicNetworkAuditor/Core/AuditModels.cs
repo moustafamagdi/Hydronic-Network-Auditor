@@ -19,6 +19,21 @@ namespace HydronicNetworkAuditor.Core
         Mixed
     }
 
+    public sealed class AuditConnector
+    {
+        public long OwnerElementId { get; set; }
+        public int ConnectorId { get; set; }
+        public string Domain { get; set; }
+        public string ConnectorType { get; set; }
+        public string PipeSystemType { get; set; }
+        public string MEPSystemName { get; set; }
+        public string Direction { get; set; }
+        public bool IsConnected { get; set; }
+        public double OriginXmm { get; set; }
+        public double OriginYmm { get; set; }
+        public double OriginZmm { get; set; }
+    }
+
     public sealed class AuditNode
     {
         public long Id { get; set; }
@@ -40,7 +55,9 @@ namespace HydronicNetworkAuditor.Core
     public sealed class AuditEdge
     {
         public long A { get; set; }
+        public int AConnectorId { get; set; }
         public long B { get; set; }
+        public int BConnectorId { get; set; }
         public string ACategory { get; set; }
         public string BCategory { get; set; }
         public TemperatureNetwork ANetwork { get; set; }
@@ -72,6 +89,7 @@ namespace HydronicNetworkAuditor.Core
         public string DocumentPath { get; set; }
         public DateTime GeneratedAt { get; set; }
         public List<AuditNode> Nodes { get; } = new List<AuditNode>();
+        public List<AuditConnector> Connectors { get; } = new List<AuditConnector>();
         public List<AuditEdge> Edges { get; } = new List<AuditEdge>();
         public List<ConnectedComponentSummary> Components { get; } = new List<ConnectedComponentSummary>();
         public List<AuditEdge> DirectHtLtBoundaries { get; } = new List<AuditEdge>();
