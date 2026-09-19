@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Hydronic Network Auditor</Name>
+    <Assembly>%AppData%\Autodesk\Revit\Addins\2024\HydronicNetworkAuditor.dll</Assembly>
+    <AddInId>8AEB1A30-5E65-4CF6-AFC6-0B8E582A3F87</AddInId>
+    <FullClassName>HydronicNetworkAuditor.App</FullClassName>
+    <VendorId>MMTL</VendorId>
+    <VendorDescription>MM Tools</VendorDescription>
+  </AddIn>
+</RevitAddIns>
