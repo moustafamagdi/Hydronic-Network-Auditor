@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -41,10 +43,35 @@ namespace HydronicNetworkAuditor.Commands
 
                 return Result.Succeeded;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                message = ex.ToString();
+                string errorLog = TryWriteErrorLog(ex);
+                message = string.IsNullOrWhiteSpace(errorLog)
+                    ? ex.ToString()
+                    : ex + Environment.NewLine + Environment.NewLine + "Error log: " + errorLog;
+
                 return Result.Failed;
+            }
+        }
+
+        private static string TryWriteErrorLog(Exception exception)
+        {
+            try
+            {
+                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                string root = Path.Combine(desktop, "HydronicNetworkAuditor");
+                Directory.CreateDirectory(root);
+
+                string path = Path.Combine(
+                    root,
+                    "error_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".txt");
+
+                File.WriteAllText(path, exception.ToString());
+                return path;
+            }
+            catch
+            {
+                return null;
             }
         }
     }
