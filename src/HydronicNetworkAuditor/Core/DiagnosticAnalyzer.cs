@@ -48,10 +48,15 @@ namespace HydronicNetworkAuditor.Core
 
                 if (IsProbableFamilyConnectorProblem(node))
                 {
-                    result.Diagnostics.Issues.Add(CreateNodeIssue(
+                    DiagnosticIssue familyIssue = CreateNodeIssue(
                         node,
-                        "Probable Family Connector Misclassification",
-                        "Non-pipe CHWR family instance is exposing Supply or Mixed hydronic connector behavior."));
+                        "Family Connector Misclassification",
+                        "Non-pipe CHWR family instance is exposing Supply or Mixed hydronic connector behavior.");
+
+                    // Keep the historical key stable so the run-to-run delta is not reset by
+                    // the wording improvement introduced in diagnostic QA v0.3.
+                    familyIssue.Key = "PROBABLE_FAMILY_CONNECTOR_MISCLASSIFICATION|" + node.Id;
+                    result.Diagnostics.Issues.Add(familyIssue);
                 }
 
                 if (node.OpenEndConnectorCount > 0)
