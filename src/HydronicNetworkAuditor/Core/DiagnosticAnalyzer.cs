@@ -173,7 +173,33 @@ namespace HydronicNetworkAuditor.Core
                     ? 0.0
                     : 100.0 * problemCount / nodes.Count;
 
-                double score = errorRate + Math.Min(100.0, affectedCount * 2.0);
+                // Family-wide confidence is driven primarily by prevalence inside the family.
+                // Nearby affected pipes are supporting evidence only and must not promote an isolated
+                // bad instance into a family-wide root cause.
+                double score =
+                    (errorRate * 0.8) +
+                    Math.Min(20.0, affectedCount * 2.0);
+
+                string confidence;
+                bool isFamilyWideRootCause = false;
+
+                if (problemCount == 0)
+                {
+                    confidence = "Healthy";
+                }
+                else if (nodes.Count >= 2 && errorRate >= 50.0)
+                {
+                    confidence = "Family-wide Root Cause";
+                    isFamilyWideRootCause = true;
+                }
+                else if (affectedCount > 0)
+                {
+                    confidence = "Localized Suspect";
+                }
+                else
+                {
+                    confidence = "Likely Propagation Victim";
+                }
 
                 var row = new FamilyDiagnostic
                 {
@@ -186,10 +212,8 @@ namespace HydronicNetworkAuditor.Core
                     AffectedConflictPipeCount = affectedCount,
                     ErrorRatePercent = errorRate,
                     RootCauseScore = score,
-                    IsProbableRootCause =
-                        nodes.Count >= 2 &&
-                        problemCount > 0 &&
-                        (errorRate >= 50.0 || affectedCount >= 3)
+                    ConfidenceClassification = confidence,
+                    IsProbableRootCause = isFamilyWideRootCause
                 };
 
                 foreach (long id in nodes
@@ -205,8 +229,10 @@ namespace HydronicNetworkAuditor.Core
 
             result.Diagnostics.FamilyRankings.Sort((a, b) =>
             {
-                int rootCompare = b.IsProbableRootCause.CompareTo(a.IsProbableRootCause);
-                if (rootCompare != 0) return rootCompare;
+                int confidenceCompare =
+                    ConfidenceRank(b.ConfidenceClassification)
+                    .CompareTo(ConfidenceRank(a.ConfidenceClassification));
+                if (confidenceCompare != 0) return confidenceCompare;
 
                 int scoreCompare = b.RootCauseScore.CompareTo(a.RootCauseScore);
                 if (scoreCompare != 0) return scoreCompare;
@@ -220,16 +246,18 @@ namespace HydronicNetworkAuditor.Core
             IDictionary<long, AuditNode> nodeById,
             IDictionary<long, HashSet<long>> adjacency)
         {
+            // A connected component is the physical cluster. Do not split one component merely
+            // because some pipes have a nearby DH mark and others do not.
             var groups = new Dictionary<string, PropagationCluster>(
+                StringComparer.OrdinalIgnoreCase);
+            var scopesByGroup = new Dictionary<string, HashSet<string>>(
                 StringComparer.OrdinalIgnoreCase);
 
             foreach (AuditNode pipe in result.Nodes.Where(n => IsPipe(n) && n.FlowClassificationConflict))
             {
-                string scope = FindNearestScope(pipe.Id, nodeById, adjacency, PropagationSearchDepth);
                 string key =
                     pipe.TemperatureNetwork + "|" +
-                    pipe.ComponentIndex + "|" +
-                    scope;
+                    pipe.ComponentIndex;
 
                 PropagationCluster cluster;
                 if (!groups.TryGetValue(key, out cluster))
@@ -237,14 +265,28 @@ namespace HydronicNetworkAuditor.Core
                     cluster = new PropagationCluster
                     {
                         Key = key,
-                        Scope = scope,
+                        Scope = string.Empty,
                         ComponentIndex = pipe.ComponentIndex,
                         Network = pipe.TemperatureNetwork
                     };
                     groups[key] = cluster;
+                    scopesByGroup[key] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 }
 
                 cluster.ConflictPipeIds.Add(pipe.Id);
+
+                string pipeScope = FindNearestScope(
+                    pipe.Id,
+                    nodeById,
+                    adjacency,
+                    PropagationSearchDepth);
+
+                if (!string.IsNullOrWhiteSpace(pipeScope) &&
+                    !pipeScope.StartsWith("Component ", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(pipeScope, "Unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    scopesByGroup[key].Add(pipeScope);
+                }
 
                 foreach (AuditNode source in FindNearbyProblemFamilyNodes(
                     pipe.Id,
@@ -257,13 +299,28 @@ namespace HydronicNetworkAuditor.Core
                     {
                         cluster.SuspectFamilies.Add(source.Family);
                     }
+
+                    if (!cluster.SuspectInstanceIds.Contains(source.Id))
+                        cluster.SuspectInstanceIds.Add(source.Id);
+
+                    string sourceScope = InferScope(source.Mark);
+                    if (!string.IsNullOrWhiteSpace(sourceScope))
+                        scopesByGroup[key].Add(sourceScope);
                 }
             }
 
-            foreach (PropagationCluster cluster in groups.Values)
+            foreach (KeyValuePair<string, PropagationCluster> pair in groups)
             {
+                PropagationCluster cluster = pair.Value;
+                HashSet<string> scopes = scopesByGroup[pair.Key];
+
+                cluster.Scope = scopes.Count == 0
+                    ? "Component " + cluster.ComponentIndex
+                    : string.Join("/", scopes.OrderBy(s => s, StringComparer.OrdinalIgnoreCase));
+
                 cluster.ConflictPipeIds.Sort();
                 cluster.SuspectFamilies.Sort(StringComparer.OrdinalIgnoreCase);
+                cluster.SuspectInstanceIds.Sort();
                 cluster.ConflictPipeCount = cluster.ConflictPipeIds.Count;
                 result.Diagnostics.PropagationClusters.Add(cluster);
             }
@@ -450,6 +507,17 @@ namespace HydronicNetworkAuditor.Core
             }
 
             return string.Empty;
+        }
+
+        private static int ConfidenceRank(string confidence)
+        {
+            if (string.Equals(confidence, "Family-wide Root Cause", StringComparison.OrdinalIgnoreCase))
+                return 3;
+            if (string.Equals(confidence, "Localized Suspect", StringComparison.OrdinalIgnoreCase))
+                return 2;
+            if (string.Equals(confidence, "Likely Propagation Victim", StringComparison.OrdinalIgnoreCase))
+                return 1;
+            return 0;
         }
 
         private static string MostCommon(IEnumerable<string> values)
