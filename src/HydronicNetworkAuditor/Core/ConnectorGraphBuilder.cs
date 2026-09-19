@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
-using Autodesk.Revit.DB.Plumbing;
 
 namespace HydronicNetworkAuditor.Core
 {
@@ -57,7 +56,7 @@ namespace HydronicNetworkAuditor.Core
                 ConnectorManager connectorManager = TryGetConnectorManager(element);
                 if (connectorManager == null) continue;
 
-                AuditNode node = BuildNode(document, element, connectorManager);
+                AuditNode node = BuildNode(document, element, connectorManager, result.Connectors);
                 nodes[node.Id] = node;
                 result.Nodes.Add(node);
             }
@@ -89,19 +88,29 @@ namespace HydronicNetworkAuditor.Core
                         long otherId = otherOwner.Id.Value;
                         if (otherId == ownerId || !nodes.ContainsKey(otherId)) continue;
 
-                        long min = Math.Min(ownerId, otherId);
-                        long max = Math.Max(ownerId, otherId);
-                        string key = min + "|" + max;
+                        int connectorId = SafeConnectorId(connector);
+                        int referenceId = SafeConnectorId(reference);
 
+                        bool firstIsA = ownerId < otherId ||
+                                        (ownerId == otherId && connectorId <= referenceId);
+
+                        long aId = firstIsA ? ownerId : otherId;
+                        int aConnectorId = firstIsA ? connectorId : referenceId;
+                        long bId = firstIsA ? otherId : ownerId;
+                        int bConnectorId = firstIsA ? referenceId : connectorId;
+
+                        string key = aId + ":" + aConnectorId + "|" + bId + ":" + bConnectorId;
                         if (!edgeKeys.Add(key)) continue;
 
-                        AuditNode a = nodes[min];
-                        AuditNode b = nodes[max];
+                        AuditNode a = nodes[aId];
+                        AuditNode b = nodes[bId];
 
                         result.Edges.Add(new AuditEdge
                         {
-                            A = min,
-                            B = max,
+                            A = aId,
+                            AConnectorId = aConnectorId,
+                            B = bId,
+                            BConnectorId = bConnectorId,
                             ACategory = a.Category,
                             BCategory = b.Category,
                             ANetwork = a.TemperatureNetwork,
@@ -110,8 +119,11 @@ namespace HydronicNetworkAuditor.Core
                             BFlowSide = b.FlowSide
                         });
 
-                        a.ConnectedElementIds.Add(max);
-                        b.ConnectedElementIds.Add(min);
+                        if (!a.ConnectedElementIds.Contains(bId))
+                            a.ConnectedElementIds.Add(bId);
+
+                        if (!b.ConnectedElementIds.Contains(aId))
+                            b.ConnectedElementIds.Add(aId);
                     }
                 }
             }
@@ -129,7 +141,8 @@ namespace HydronicNetworkAuditor.Core
         private static AuditNode BuildNode(
             Document document,
             Element element,
-            ConnectorManager connectorManager)
+            ConnectorManager connectorManager,
+            IList<AuditConnector> connectorRecords)
         {
             var systemNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var systemTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -140,32 +153,71 @@ namespace HydronicNetworkAuditor.Core
             {
                 connectorCount++;
 
+                bool isConnected = false;
+                string domain = string.Empty;
+                string connectorType = string.Empty;
+                string pipeSystemType = string.Empty;
+                string mepSystemName = string.Empty;
+                string direction = string.Empty;
+                double x = 0.0;
+                double y = 0.0;
+                double z = 0.0;
+
+                try { isConnected = connector.IsConnected; } catch { }
+                try { domain = connector.Domain.ToString(); } catch { }
+                try { connectorType = connector.ConnectorType.ToString(); } catch { }
+
                 try
                 {
-                    if (connector.ConnectorType == ConnectorType.End && !connector.IsConnected)
+                    if (connector.ConnectorType == ConnectorType.End && !isConnected)
                         openEnds++;
                 }
-                catch
+                catch { }
+
+                try
                 {
-                    // Some connector types do not expose all state consistently.
+                    pipeSystemType = connector.PipeSystemType.ToString();
+                    if (!string.IsNullOrWhiteSpace(pipeSystemType))
+                        systemTypes.Add(pipeSystemType);
                 }
+                catch { }
 
                 try
                 {
                     if (connector.MEPSystem != null)
                     {
-                        if (!string.IsNullOrWhiteSpace(connector.MEPSystem.Name))
-                            systemNames.Add(connector.MEPSystem.Name);
-
-                        var pipingSystem = connector.MEPSystem as PipingSystem;
-                        if (pipingSystem != null)
-                            systemTypes.Add(pipingSystem.SystemType.ToString());
+                        mepSystemName = connector.MEPSystem.Name ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(mepSystemName))
+                            systemNames.Add(mepSystemName);
                     }
                 }
-                catch
+                catch { }
+
+                try { direction = connector.Direction.ToString(); } catch { }
+
+                try
                 {
-                    // Keep auditing even if one connector/system is corrupt.
+                    XYZ origin = connector.Origin;
+                    x = origin.X * 304.8;
+                    y = origin.Y * 304.8;
+                    z = origin.Z * 304.8;
                 }
+                catch { }
+
+                connectorRecords.Add(new AuditConnector
+                {
+                    OwnerElementId = element.Id.Value,
+                    ConnectorId = SafeConnectorId(connector),
+                    Domain = domain,
+                    ConnectorType = connectorType,
+                    PipeSystemType = pipeSystemType,
+                    MEPSystemName = mepSystemName,
+                    Direction = direction,
+                    IsConnected = isConnected,
+                    OriginXmm = x,
+                    OriginYmm = y,
+                    OriginZmm = z
+                });
             }
 
             string family = string.Empty;
@@ -219,6 +271,12 @@ namespace HydronicNetworkAuditor.Core
                 ConnectorCount = connectorCount,
                 OpenEndConnectorCount = openEnds
             };
+        }
+
+        private static int SafeConnectorId(Connector connector)
+        {
+            try { return connector.Id; }
+            catch { return -1; }
         }
 
         private static string TryReadParameter(Element element, string name)
