@@ -159,8 +159,8 @@ namespace HydronicNetworkAuditor.Core
             foreach (var group in familyNodes)
             {
                 List<AuditNode> nodes = group.ToList();
-                int wrongSupply = nodes.Count(IsWrongSupplyOnChwr);
                 int mixed = nodes.Count(IsMixedFlow);
+                int wrongSupply = nodes.Count(n => !IsMixedFlow(n) && IsWrongSupplyOnChwr(n));
                 int correctReturn = nodes.Count(IsCorrectReturnOnChwr);
                 int problemCount = wrongSupply + mixed;
 
