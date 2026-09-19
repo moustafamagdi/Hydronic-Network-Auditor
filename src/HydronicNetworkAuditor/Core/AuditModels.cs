@@ -127,6 +127,7 @@ namespace HydronicNetworkAuditor.Core
         public List<ConnectedComponentSummary> Components { get; } = new List<ConnectedComponentSummary>();
         public List<AuditEdge> DirectHtLtBoundaries { get; } = new List<AuditEdge>();
         public List<InterfaceGapCandidate> InterfaceGapCandidates { get; } = new List<InterfaceGapCandidate>();
+        public DiagnosticResult Diagnostics { get; } = new DiagnosticResult();
 
         public int OpenEndConnectorCount { get; set; }
         public int FlowClassificationConflictCount { get; set; }
