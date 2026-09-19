@@ -35,6 +35,18 @@ namespace HydronicNetworkAuditor
                 if (!panel.GetItems().Any(i => i.Name == buttonData.Name))
                     panel.AddItem(buttonData);
 
+                var repairButtonData = new PushButtonData(
+                    "HydronicNetworkAuditor.RepairSelected",
+                    "Repair Selected\nConnections",
+                    assemblyPath,
+                    "HydronicNetworkAuditor.Commands.RepairSelectedConnectionsCommand")
+                {
+                    ToolTip = "Safely disconnect and reconnect the exact physical piping connector pairs of the selected MEP family instance(s). Rolls back all changes if any original pair cannot be restored."
+                };
+
+                if (!panel.GetItems().Any(i => i.Name == repairButtonData.Name))
+                    panel.AddItem(repairButtonData);
+
                 return Result.Succeeded;
             }
             catch
