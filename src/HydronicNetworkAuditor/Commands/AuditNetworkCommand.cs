@@ -35,8 +35,19 @@ namespace HydronicNetworkAuditor.Commands
                 var analyzer = new NetworkAnalyzer();
                 analyzer.Analyze(audit);
 
+                var diagnosticAnalyzer = new DiagnosticAnalyzer();
+                diagnosticAnalyzer.Analyze(audit);
+
+                var history = new AuditHistoryStore();
+                history.ApplyDelta(audit);
+
                 var exporter = new ReportExporter();
                 ExportBundle export = exporter.Export(audit);
+
+                var diagnosticExporter = new DiagnosticReportExporter();
+                diagnosticExporter.Export(audit, export);
+
+                history.Save(audit);
 
                 var window = new AuditSummaryWindow(audit, export);
                 window.Show();
