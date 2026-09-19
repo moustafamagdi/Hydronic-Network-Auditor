@@ -42,13 +42,20 @@ namespace HydronicNetworkAuditor.Core
         public string Name { get; set; }
         public string Family { get; set; }
         public string Type { get; set; }
+        public string Mark { get; set; }
         public string SystemNames { get; set; }
         public string SystemTypes { get; set; }
+        public string DeclaredSystemType { get; set; }
+        public string DeclaredSystemClassification { get; set; }
         public string EvidenceText { get; set; }
         public TemperatureNetwork TemperatureNetwork { get; set; }
         public FlowSide FlowSide { get; set; }
+        public FlowSide ConnectorFlowSide { get; set; }
+        public bool FlowClassificationConflict { get; set; }
+        public bool IsHydronicRelevant { get; set; }
         public int ConnectorCount { get; set; }
         public int OpenEndConnectorCount { get; set; }
+        public int ComponentIndex { get; set; }
         public List<long> ConnectedElementIds { get; } = new List<long>();
     }
 
@@ -68,6 +75,32 @@ namespace HydronicNetworkAuditor.Core
         public bool IsDirectHtLtBoundary =>
             (ANetwork == TemperatureNetwork.HT && BNetwork == TemperatureNetwork.LT) ||
             (ANetwork == TemperatureNetwork.LT && BNetwork == TemperatureNetwork.HT);
+    }
+
+    public sealed class InterfaceGapCandidate
+    {
+        public long AElementId { get; set; }
+        public int AConnectorId { get; set; }
+        public int AComponentIndex { get; set; }
+        public TemperatureNetwork ANetwork { get; set; }
+        public FlowSide FlowSide { get; set; }
+        public string AMark { get; set; }
+        public string ASystemNames { get; set; }
+
+        public long BElementId { get; set; }
+        public int BConnectorId { get; set; }
+        public int BComponentIndex { get; set; }
+        public TemperatureNetwork BNetwork { get; set; }
+        public string BMark { get; set; }
+        public string BSystemNames { get; set; }
+
+        public double DistanceMm { get; set; }
+        public double AXmm { get; set; }
+        public double AYmm { get; set; }
+        public double AZmm { get; set; }
+        public double BXmm { get; set; }
+        public double BYmm { get; set; }
+        public double BZmm { get; set; }
     }
 
     public sealed class ConnectedComponentSummary
@@ -93,8 +126,10 @@ namespace HydronicNetworkAuditor.Core
         public List<AuditEdge> Edges { get; } = new List<AuditEdge>();
         public List<ConnectedComponentSummary> Components { get; } = new List<ConnectedComponentSummary>();
         public List<AuditEdge> DirectHtLtBoundaries { get; } = new List<AuditEdge>();
+        public List<InterfaceGapCandidate> InterfaceGapCandidates { get; } = new List<InterfaceGapCandidate>();
 
         public int OpenEndConnectorCount { get; set; }
+        public int FlowClassificationConflictCount { get; set; }
         public int MixedClassificationNodeCount { get; set; }
     }
 }
