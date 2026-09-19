@@ -54,9 +54,13 @@
     <Compile Include="Commands\AuditNetworkCommand.cs" />
     <Compile Include="Core\AuditModels.cs" />
     <Compile Include="Core\ConnectorGraphBuilder.cs" />
+    <Compile Include="Core\DiagnosticModels.cs" />
+    <Compile Include="Core\DiagnosticAnalyzer.cs" />
     <Compile Include="Core\NetworkClassifier.cs" />
     <Compile Include="Core\NetworkAnalyzer.cs" />
     <Compile Include="Reporting\ReportExporter.cs" />
+    <Compile Include="Reporting\AuditHistoryStore.cs" />
+    <Compile Include="Reporting\DiagnosticReportExporter.cs" />
     <Compile Include="UI\AuditSummaryWindow.xaml.cs">
       <DependentUpon>AuditSummaryWindow.xaml</DependentUpon>
     </Compile>
