@@ -53,29 +53,50 @@ namespace HydronicNetworkAuditor.Reporting
 
             sb.AppendLine("DIAGNOSTIC SUMMARY");
             sb.AppendLine("------------------");
-            sb.AppendLine("Diagnostic issues: " + d.Issues.Count);
+            int openEndIssueNodes = d.Issues.Count(i =>
+                string.Equals(i.IssueType, "Hydronic Open End", StringComparison.OrdinalIgnoreCase));
+            int coreIssueCount = d.Issues.Count - openEndIssueNodes;
+
+            sb.AppendLine("Core diagnostic issues: " + coreIssueCount);
+            sb.AppendLine("Hydronic open-end nodes (separate QA): " + openEndIssueNodes);
+            sb.AppendLine("Hydronic open-end connectors: " + result.OpenEndConnectorCount);
             sb.AppendLine("Flow classification conflicts: " + result.FlowClassificationConflictCount);
-            sb.AppendLine("Probable root-cause families: " +
-                          d.FamilyRankings.Count(f => f.IsProbableRootCause));
+            sb.AppendLine("Family-wide root causes: " +
+                          d.FamilyRankings.Count(f =>
+                              string.Equals(
+                                  f.ConfidenceClassification,
+                                  "Family-wide Root Cause",
+                                  StringComparison.OrdinalIgnoreCase)));
+            sb.AppendLine("Localized family suspects: " +
+                          d.FamilyRankings.Count(f =>
+                              string.Equals(
+                                  f.ConfidenceClassification,
+                                  "Localized Suspect",
+                                  StringComparison.OrdinalIgnoreCase)));
             sb.AppendLine("Propagation clusters: " + d.PropagationClusters.Count);
             sb.AppendLine("Direct HT/LT boundaries: " + result.DirectHtLtBoundaries.Count);
             sb.AppendLine("HT/LT gap candidates: " + result.InterfaceGapCandidates.Count);
             sb.AppendLine();
 
-            sb.AppendLine("TOP ROOT-CAUSE FAMILIES");
-            sb.AppendLine("-----------------------");
+            sb.AppendLine("FAMILY DIAGNOSTIC CONFIDENCE");
+            sb.AppendLine("----------------------------");
             foreach (FamilyDiagnostic family in d.FamilyRankings
-                .Where(f => f.IsProbableRootCause)
+                .Where(f => !string.Equals(
+                    f.ConfidenceClassification,
+                    "Healthy",
+                    StringComparison.OrdinalIgnoreCase))
                 .Take(15))
             {
                 sb.AppendLine(
-                    family.Family +
+                    family.ConfidenceClassification +
+                    " | " + family.Family +
                     " | CHWR=" + family.ChwrInstanceCount +
                     " | WrongSupply=" + family.WrongSupplyCount +
                     " | Mixed=" + family.MixedCount +
                     " | AffectedPipes=" + family.AffectedConflictPipeCount +
                     " | Error=" + family.ErrorRatePercent.ToString("0.0", CultureInfo.InvariantCulture) + "%" +
-                    " | Score=" + family.RootCauseScore.ToString("0.0", CultureInfo.InvariantCulture));
+                    " | EvidenceScore=" + family.RootCauseScore.ToString("0.0", CultureInfo.InvariantCulture) +
+                    " | InstanceIDs=" + string.Join(";", family.ProblemInstanceIds));
             }
 
             sb.AppendLine();
@@ -91,7 +112,11 @@ namespace HydronicNetworkAuditor.Reporting
                     " | Suspects=" +
                     (cluster.SuspectFamilies.Count == 0
                         ? "(none within search depth)"
-                        : string.Join("; ", cluster.SuspectFamilies)));
+                        : string.Join("; ", cluster.SuspectFamilies)) +
+                    " | SuspectIDs=" +
+                    (cluster.SuspectInstanceIds.Count == 0
+                        ? "(none)"
+                        : string.Join(";", cluster.SuspectInstanceIds)));
             }
 
             sb.AppendLine();
@@ -102,7 +127,7 @@ namespace HydronicNetworkAuditor.Reporting
         private static string BuildRootCausesCsv(AuditResult result)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Family,Category,CHWR Instances,Correct Return,Wrong Supply,Mixed,Affected Conflict Pipes,Error Rate %,Root Cause Score,Probable Root Cause,Problem Instance IDs");
+            sb.AppendLine("Family,Category,CHWR Instances,Correct Return,Wrong Supply,Mixed,Affected Conflict Pipes,Error Rate %,Evidence Score,Confidence Classification,Problem Instance IDs");
 
             foreach (FamilyDiagnostic f in result.Diagnostics.FamilyRankings)
             {
@@ -117,7 +142,7 @@ namespace HydronicNetworkAuditor.Reporting
                     Csv(f.AffectedConflictPipeCount),
                     Csv(f.ErrorRatePercent.ToString("0.0", CultureInfo.InvariantCulture)),
                     Csv(f.RootCauseScore.ToString("0.0", CultureInfo.InvariantCulture)),
-                    Csv(f.IsProbableRootCause),
+                    Csv(f.ConfidenceClassification),
                     Csv(string.Join(";", f.ProblemInstanceIds))
                 }));
             }
@@ -128,7 +153,7 @@ namespace HydronicNetworkAuditor.Reporting
         private static string BuildClustersCsv(AuditResult result)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Scope,Network,Component,Conflict Pipe Count,Suspect Families,Conflict Pipe IDs");
+            sb.AppendLine("Scope,Network,Component,Conflict Pipe Count,Suspect Families,Suspect Instance IDs,Conflict Pipe IDs");
 
             foreach (PropagationCluster c in result.Diagnostics.PropagationClusters)
             {
@@ -139,6 +164,7 @@ namespace HydronicNetworkAuditor.Reporting
                     Csv(c.ComponentIndex),
                     Csv(c.ConflictPipeCount),
                     Csv(string.Join(";", c.SuspectFamilies)),
+                    Csv(string.Join(";", c.SuspectInstanceIds)),
                     Csv(string.Join(";", c.ConflictPipeIds))
                 }));
             }
