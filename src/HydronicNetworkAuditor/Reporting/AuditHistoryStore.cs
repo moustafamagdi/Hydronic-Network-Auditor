@@ -98,6 +98,7 @@ namespace HydronicNetworkAuditor.Reporting
                 .Where(i =>
                     string.Equals(i.IssueType, "Flow Classification Conflict", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(i.IssueType, "Probable Family Connector Misclassification", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(i.IssueType, "Family Connector Misclassification", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(i.IssueType, "Direct HT/LT Boundary", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(i.IssueType, "HT/LT Interface Gap", StringComparison.OrdinalIgnoreCase))
                 .Select(i => i.Key);
